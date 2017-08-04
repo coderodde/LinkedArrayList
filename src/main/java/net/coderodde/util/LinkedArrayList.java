@@ -107,12 +107,24 @@ public class LinkedArrayList<E> implements List<E> {
             ++size;
         }
         
+        void bulkInsert(int index, int count, Collection<?> collection) {
+            int leftPartLength = index;
+            int rightPartLength = size - index;
+            
+            if (leftPartLength < rightPartLength) {
+                
+            } else {
+                
+            }
+        }
+        
         /**
          * This method should be used only when inserting into a full block.
          * 
-         * @param index
-         * @param element
-         * @return 
+         * @param index   the index of the element within this block.
+         * @param element the element to insert.
+         * @return a new spawned block containing a half of elements of this 
+         *         block.
          */
         LinkedArrayListBlock<E> splitInsert(int index, E element) {
             LinkedArrayListBlock<E> followerBlock = 
@@ -120,10 +132,10 @@ public class LinkedArrayList<E> implements List<E> {
             
             if (index < elements.length - index) {
                 // The new element goes into this block:
-                splitInsertInThis(index, element);
+                splitInsertInThis(index, element, followerBlock);
             } else {
                 // The new element goes into the new block:
-                splitInsertInFollower(index, element);
+                splitInsertInFollower(index, element, followerBlock);
             }
             
             return followerBlock;
@@ -191,6 +203,49 @@ public class LinkedArrayList<E> implements List<E> {
                 elements[(headIndex + 1 + i) & moduloMask] =
                 elements[(headIndex + i) & moduloMask];
             }
+        }
+        
+        /**
+         * Shifts {@code count} first elements {@code shiftLength} positions to
+         * the left (towards smaller indices). This method "wraps around" the
+         * elements that are shifted too much to the left, and inserts them to
+         * the tail part of the block.
+         * 
+         * @param count       the number of leftmost elements to shift.
+         * @param shiftLength the number of positions shifted for each element.
+         */
+        private void shiftLeft(int count, int shiftLength) {
+            for (int i = 0; i < count; ++i) {
+                elements[(headIndex - shiftLength + i) & moduloMask] =
+                elements[(headIndex + i) & moduloMask];
+            }
+        }
+        
+        /**
+         * Inserts the element in this block.
+         * 
+         * @param index         the index of the element to insert.
+         * @param element       the element to insert.
+         * @param followerBlock the follower block.
+         */
+        private void splitInsertInThis(int index,
+                                       E element,
+                                       LinkedArrayListBlock<E> followerBlock) {
+            
+        }
+        
+        /**
+         * Inserts the element in the follower block.
+         * 
+         * @param index         the index of the element to insert.
+         * @param element       the element to insert.
+         * @param followerBlock the follower block.
+         */
+        private void splitInsertInFollower(
+                int index, 
+                E element,
+                LinkedArrayListBlock<E> followerBlock) {
+            
         }
     }
     
@@ -450,6 +505,15 @@ public class LinkedArrayList<E> implements List<E> {
         }
         checkInsertionIndex(index);
         LinkedArrayListBlock<E> block = findBlock(index);
+        // Do some arithmetics here!
+        int totalElements = c.size();
+        totalElements -= block.size;
+        int numberOfNewBlocks = totalElements / degree;
+        int leftoverElements = totalElements - numberOfNewBlocks * degree;
+        
+        
+        
+        
         
         return true;
     }
