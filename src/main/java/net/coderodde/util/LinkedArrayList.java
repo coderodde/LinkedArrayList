@@ -4,7 +4,17 @@ import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
 import java.util.ListIterator;
+import java.util.Objects;
 
+/**
+ * This class implements a list data structure that combines a linked list and
+ * an array-based list.
+ * 
+ * @author Rodion "rodde" Efremov
+ * @param <E> the element type.
+ * 
+ * @version 1.6 (Aug 4, 2017)
+ */
 public class LinkedArrayList<E> implements List<E> {
 
     /**
@@ -62,6 +72,10 @@ public class LinkedArrayList<E> implements List<E> {
             return size;
         }
         
+        E get(int index) {
+            return (E) elements[(headIndex + index) & moduloMask];
+        }
+        
         /**
          * Appends the input element to the tail of this block.
          * 
@@ -94,6 +108,28 @@ public class LinkedArrayList<E> implements List<E> {
         }
         
         /**
+         * This method should be used only when inserting into a full block.
+         * 
+         * @param index
+         * @param element
+         * @return 
+         */
+        LinkedArrayListBlock<E> splitInsert(int index, E element) {
+            LinkedArrayListBlock<E> followerBlock = 
+                    new LinkedArrayListBlock<>(elements.length);
+            
+            if (index < elements.length - index) {
+                // The new element goes into this block:
+                splitInsertInThis(index, element);
+            } else {
+                // The new element goes into the new block:
+                splitInsertInFollower(index, element);
+            }
+            
+            return followerBlock;
+        }
+        
+        /**
          * Removes the element with order index {@code index}.
          * 
          * @param index the index of the element to remove.
@@ -114,6 +150,17 @@ public class LinkedArrayList<E> implements List<E> {
             
             --size;
             return ret;
+        }
+        
+        /**
+         * Wipes all the content from this block.
+         */
+        void clear() {
+            for (int i = 0; i < size; ++i) {
+                elements[(headIndex + i) & moduloMask] = null;
+            }
+            
+            size = 0;
         }
         
         /**
@@ -195,6 +242,10 @@ public class LinkedArrayList<E> implements List<E> {
     public LinkedArrayList(int degree) {
         degree = Math.max(degree, MINIMUM_BLOCK_DEGREE);
         this.degree = fixDegree(degree);
+        LinkedArrayListBlock<E> initialBlock = 
+                new LinkedArrayListBlock<>(this.degree);
+        head = initialBlock;
+        tail = initialBlock;
     }
     
     /**
@@ -247,16 +298,37 @@ public class LinkedArrayList<E> implements List<E> {
         LinkedArrayListBlock<E> targetBlock = head;
         LinkedArrayListBlock<E> sourceBlock = head.next;
         
-        while (sourceBlock != null) {
+        while (true) {
             int capacity = degree - targetBlock.size;
             int available = sourceBlock.size;
+            int load = Math.min(capacity, available);
             
-            while (capacity > 0 && available > 0) {
+            for (int i = 0; i < load; ++i) {
                 targetBlock.add(sourceBlock.delete(0));
-                --capacity;
-                --available;
             }
             
+            capacity -= load;
+            available -= load;
+            
+            if (capacity == 0) {
+                targetBlock = targetBlock.next;
+            }
+            
+            if (available == 0) {
+                sourceBlock = sourceBlock.next;
+                
+                if (sourceBlock == null) {
+                    return;
+                }
+            }
+            
+            if (targetBlock == sourceBlock) {
+                sourceBlock = sourceBlock.next;
+            
+                if (sourceBlock == null) {
+                    return;
+                }
+            }
         }
     }
     
@@ -272,7 +344,17 @@ public class LinkedArrayList<E> implements List<E> {
 
     @Override
     public boolean contains(Object o) {
-        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+        for (LinkedArrayListBlock<E> block = head; 
+                block != null; 
+                block = block.next) {
+            for (int i = 0; i < block.size; ++i) {
+                if (Objects.equals(o, block.get(i))) {
+                    return true;
+                }
+            }
+        }
+        
+        return false;
     }
 
     @Override
@@ -294,27 +376,82 @@ public class LinkedArrayList<E> implements List<E> {
 
     @Override
     public boolean add(E e) {
-        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+        if (tail.size == degree) {
+            LinkedArrayListBlock<E> newTail =
+                    new LinkedArrayListBlock<>(degree);
+            tail.next = newTail;
+            newTail.prev = tail;
+            tail = newTail;
+        }
+        
+        tail.add(e);
+        modificationCount++;
+        size++;
+        return true;
     }
 
     @Override
     public boolean remove(Object o) {
-        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+        for (LinkedArrayListBlock<E> block = head; 
+                head != null;
+                head = head.next) {
+            for (int i = 0; i < block.size; ++i) {
+                if (Objects.equals(o, block.get(i))) {
+                    block.delete(i);
+                    modificationCount++;
+                    size--;
+                    return true;
+                }
+            }
+        }
+        
+        return false;
     }
 
     @Override
     public boolean containsAll(Collection<?> c) {
-        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+        for (Object o : c) {
+            if (!contains((E) o)) {
+                return false;
+            }
+        }
+        
+        return true;
     }
 
     @Override
     public boolean addAll(Collection<? extends E> c) {
-        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+        if (c.isEmpty()) {
+            return false;
+        }
+        
+        for (Object o : c) {
+            if (tail.size == degree) {
+                LinkedArrayListBlock<E> newTail = 
+                        new LinkedArrayListBlock<>(degree);
+                
+                tail.next = newTail;
+                newTail.prev = tail;
+                tail = newTail;
+            }
+            
+            tail.add((E) o);
+        }
+        
+        modificationCount += c.size();
+        size += c.size();
+        return true;
     }
 
     @Override
     public boolean addAll(int index, Collection<? extends E> c) {
-        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+        if (c.isEmpty()) {
+            return false;
+        }
+        checkInsertionIndex(index);
+        LinkedArrayListBlock<E> block = findBlock(index);
+        
+        return true;
     }
 
     @Override
@@ -329,7 +466,10 @@ public class LinkedArrayList<E> implements List<E> {
 
     @Override
     public void clear() {
-        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+        modificationCount += size;
+        size = 0;
+        tail = head;
+        head.clear();
     }
 
     @Override
@@ -393,5 +533,46 @@ public class LinkedArrayList<E> implements List<E> {
         }
         
         return c;
+    }
+    
+    private LinkedArrayListBlock<E> findBlock(int index) {
+        // The position indexed by 'index' is closer to the head?
+        if (index < size - index) {
+            // There is a good chance that we may reach the target block faster
+            // if we move starting from the head block towards the tail:
+            for (LinkedArrayListBlock<E> block = head;; block = block.next) {
+                if (index < block.size) {
+                    return block;
+                }
+                
+                index -= block.size;
+            }
+        } else {
+            // Symmetrically, we might reach the target block faster if we start
+            // from the tail moving towards the head:
+            int currentBlockMinIndex = size - tail.size;
+            
+            for (LinkedArrayListBlock<E> block = tail;;) {
+                if (index >= currentBlockMinIndex) {
+                    return block;
+                }
+                
+                block = block.prev;
+                currentBlockMinIndex -= block.size;
+            }
+        }
+    }
+    
+    private void checkInsertionIndex(int index) {
+        if (index < 0) {
+            throw new IndexOutOfBoundsException(
+                    "The insertion index is negative: " + index + ".");
+        }
+        
+        if (index > size) {
+            throw new IndexOutOfBoundsException(
+                    "The insertion index is too large: " + index + ". " +
+                            "Must be at most " + size + ".");
+        }
     }
 }
