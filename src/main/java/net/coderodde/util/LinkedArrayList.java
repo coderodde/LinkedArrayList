@@ -8,7 +8,9 @@ import java.util.Objects;
 
 /**
  * This class implements a list data structure that combines a linked list and
- * an array-based list.
+ * an array-based list. Basically, it is a linked list of small arrays, and can
+ * be seen as an approximation of both array-based and linked lists. The 
+ * <b>degree</b> of a linked array list is the capacity of each block.
  * 
  * @author Rodion "rodde" Efremov
  * @param <E> the element type.
@@ -56,7 +58,9 @@ public class LinkedArrayList<E> implements List<E> {
         
         /**
          * Creates a new block with given degree.
-         * @param degree 
+         * 
+         * @param degree the degree of this block. Is assumed to be a positive
+         *               power of two.
          */
         LinkedArrayListBlock(int degree) {
             this.elements = (E[]) new Object[degree];
@@ -64,16 +68,28 @@ public class LinkedArrayList<E> implements List<E> {
         }
         
         /**
-         * Returns the number of elements stored in this block.
+         * Returns the element at index {@code index}.
          * 
-         * @return the number of elements stored.
+         * @param index the element index within this block.
+         * 
+         * @return the {@code index}th element of this block.
          */
-        int size() {
-            return size;
-        }
-        
         E get(int index) {
             return (E) elements[(headIndex + index) & moduloMask];
+        }
+        
+        /**
+         * Sets the new element at index {@code index}.
+         * 
+         * @param index the local element index within this block.
+         * @param value the new element.
+         * 
+         * @return the old element.
+         */
+        E set(int index, E value) {
+            E oldValue = (E) elements[(headIndex + index) & moduloMask];
+            elements[(headIndex + index) & moduloMask] = value;
+            return oldValue;
         }
         
         /**
@@ -81,9 +97,18 @@ public class LinkedArrayList<E> implements List<E> {
          * 
          * @param element the element to append.
          */
-        void add(E element) {
-            int index = (headIndex + size++) & moduloMask;
-            elements[index] = element;
+        void append(E element) {
+            elements[(headIndex + size++) & moduloMask] = element;
+        }
+        
+        /**
+         * Prepends the input element to the head of this block.
+         * 
+         * @param element the element to append.
+         */
+        void prepend(E element) {
+            elements[headIndex = ((headIndex - 1) & moduloMask)] = element;
+            ++size;
         }
         
         /**
@@ -176,6 +201,29 @@ public class LinkedArrayList<E> implements List<E> {
         }
         
         /**
+         * Removes the first element from this block.
+         * 
+         * @return the first element.
+         */
+        E removeFirst() {
+            E first = (E) elements[headIndex];
+            headIndex = (headIndex + 1) & moduloMask;
+            --size;
+            return first;
+        }
+        
+        /**
+         * Removes the last element from this block.
+         * 
+         * @return the last element.
+         */
+        E removeLast() {
+            E last = (E) elements[(headIndex + size - 1) & moduloMask];
+            --size;
+            return last;
+        }
+        
+        /**
          * Shifts {@code count} first elements one position to the left (towards
          * smaller indices). When the leftmost element is shifted one position 
          * to the left, it "wraps around" and goes to the very last array
@@ -184,10 +232,7 @@ public class LinkedArrayList<E> implements List<E> {
          * @param count number of leftmost elements to shift.
          */
         private void shiftLeft(int count) {
-            for (int i = 0; i < count; ++i) {
-                elements[(headIndex - 1 + i) & moduloMask] =
-                elements[(headIndex + i) & moduloMask];
-            }
+            shiftLeft(count, 1);
         }
         
         /**
@@ -199,10 +244,7 @@ public class LinkedArrayList<E> implements List<E> {
          * @param count number of rightmost elements to shift.
          */
         private void shiftRight(int count) {
-            for (int i = count - 1; i >= 0; --i) {
-                elements[(headIndex + 1 + i) & moduloMask] =
-                elements[(headIndex + i) & moduloMask];
-            }
+            shiftRight(count, 1);
         }
         
         /**
@@ -212,12 +254,30 @@ public class LinkedArrayList<E> implements List<E> {
          * the tail part of the block.
          * 
          * @param count       the number of leftmost elements to shift.
-         * @param shiftLength the number of positions shifted for each element.
+         * @param shiftLength the number of positions shifted for each affected
+         *                    element.
          */
         private void shiftLeft(int count, int shiftLength) {
             for (int i = 0; i < count; ++i) {
                 elements[(headIndex - shiftLength + i) & moduloMask] =
                 elements[(headIndex + i) & moduloMask];
+            }
+        }
+        
+        /**
+         * Shifts {@codde count} last elements {@code shiftLength} positions to
+         * the right (towards larger indices). This method "wraps around" the 
+         * elements that are shifted too much to the right, and inserts them to
+         * the head of the block.
+         * 
+         * @param count       the number of rightmost elements to shift.
+         * @param shiftLength the number of positions shifted for each affected
+         *                    element.
+         */
+        private void shiftRight(int count, int shiftLength) {
+            for (int i = count - 1; i >= 0; --i) {
+                elements[(headIndex + size - 1 - i + shiftLength) & moduloMask]
+                = elements[(headIndex + size - 1 - i) & moduloMask];
             }
         }
         
@@ -289,6 +349,10 @@ public class LinkedArrayList<E> implements List<E> {
      */
     private LinkedArrayListBlock<E> tail;
     
+    private int localBlockIndex;
+    
+    private LinkedArrayListBlock<E> block;
+    
     /**
      * Constructs a new, empty list with given degree.
      * 
@@ -301,6 +365,7 @@ public class LinkedArrayList<E> implements List<E> {
                 new LinkedArrayListBlock<>(this.degree);
         head = initialBlock;
         tail = initialBlock;
+        blocks = 1;
     }
     
     /**
@@ -334,7 +399,7 @@ public class LinkedArrayList<E> implements List<E> {
      * @return the load factor.
      */
     public float getLoadFactor() {
-        if (blocks == 0) {
+        if (size == 0) {
             return 0.0f;
         }
         
@@ -359,7 +424,7 @@ public class LinkedArrayList<E> implements List<E> {
             int load = Math.min(capacity, available);
             
             for (int i = 0; i < load; ++i) {
-                targetBlock.add(sourceBlock.delete(0));
+                targetBlock.append(sourceBlock.delete(0));
             }
             
             capacity -= load;
@@ -437,9 +502,10 @@ public class LinkedArrayList<E> implements List<E> {
             tail.next = newTail;
             newTail.prev = tail;
             tail = newTail;
+            blocks++;
         }
         
-        tail.add(e);
+        tail.append(e);
         modificationCount++;
         size++;
         return true;
@@ -453,6 +519,12 @@ public class LinkedArrayList<E> implements List<E> {
             for (int i = 0; i < block.size; ++i) {
                 if (Objects.equals(o, block.get(i))) {
                     block.delete(i);
+                    
+                    if (block.size == 0 && head != tail) {
+                        unlink(block);
+                        blocks--;
+                    }
+                    
                     modificationCount++;
                     size--;
                     return true;
@@ -488,9 +560,10 @@ public class LinkedArrayList<E> implements List<E> {
                 tail.next = newTail;
                 newTail.prev = tail;
                 tail = newTail;
+                blocks++;
             }
             
-            tail.add((E) o);
+            tail.append((E) o);
         }
         
         modificationCount += c.size();
@@ -503,16 +576,50 @@ public class LinkedArrayList<E> implements List<E> {
         if (c.isEmpty()) {
             return false;
         }
+        
         checkInsertionIndex(index);
-        LinkedArrayListBlock<E> block = findBlock(index);
+        
+        LinkedArrayListBlock<E> firstBlock;
+        int firstBlockIndex;
+        
+        // The position indexed by 'index' is closer to the head?
+        if (index < size - index) {
+            // There is a good chance that we may reach the target block faster
+            // if we move starting from the head block towards the tail:
+            for (LinkedArrayListBlock<E> block = head;; block = block.next) {
+                if (index <= block.size) {
+                    firstBlock = block;
+                    firstBlockIndex = index;
+                    break;
+                }
+                
+                index -= block.size;
+            }
+        } else {
+            // Symmetrically, we might reach the target block faster if we start
+            // from the tail moving towards the head:
+            int currentBlockMinIndex = size - tail.size;
+            
+            for (LinkedArrayListBlock<E> block = tail;;) {
+                if (index >= currentBlockMinIndex) {
+                    firstBlock = block;
+                    break;
+                }
+                
+                block = block.prev;
+                currentBlockMinIndex -= block.size;
+            }
+        }
+        
         // Do some arithmetics here!
-        int totalElements = c.size();
-        totalElements -= block.size;
-        int numberOfNewBlocks = totalElements / degree;
-        int leftoverElements = totalElements - numberOfNewBlocks * degree;
+        int collectionSize = c.size();
+        int blockSpaceAvailable = degree - firstBlock.size;
         
-        
-        
+        if (collectionSize <= blockSpaceAvailable) {
+            for (E element : c) {
+                
+            }
+        }
         
         
         return true;
@@ -520,35 +627,240 @@ public class LinkedArrayList<E> implements List<E> {
 
     @Override
     public boolean removeAll(Collection<?> c) {
-        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+        if (c.isEmpty()) {
+            return false;
+        }
+        
+        for (Object o : c) {
+            remove((E) o);
+        }
+        
+        return true;
     }
 
     @Override
     public boolean retainAll(Collection<?> c) {
-        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+        boolean modified = false;
+        Iterator<E> iterator = iterator();
+        
+        while (iterator.hasNext()) {
+            E currentElement = iterator.next();
+            
+            if (!c.contains(currentElement)) {
+                iterator.remove();
+                modified = true;
+            }
+        }
+        
+        return modified;
     }
 
     @Override
     public void clear() {
         modificationCount += size;
         size = 0;
+        head.next = null;
         tail = head;
+        blocks = 1;
         head.clear();
     }
 
     @Override
     public E get(int index) {
-        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+        checkAccessIndex(index);
+        searchBlockIndexAccess(index);
+        return block.get(localBlockIndex);
     }
 
     @Override
     public E set(int index, E element) {
-        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+        checkAccessIndex(index);
+        searchBlockIndexAccess(index);
+        return block.set(localBlockIndex, element);
     }
 
     @Override
     public void add(int index, E element) {
-        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+        checkInsertionIndex(index);
+        searchBlockIndexInsertion(index);
+        
+        if (block.size < degree) {
+            block.insert(localBlockIndex, element);
+        } else {
+            insertIntoFullBlock(element);
+        }
+        
+        size++;
+    }
+    
+    private void insertIntoFullBlock(E element) {
+        int localBlockIndex = this.localBlockIndex;
+        LinkedArrayListBlock<E> block = this.block;
+        
+        boolean leftNeighborCanAccommodate = 
+                block.prev != null && block.prev.size < degree;
+        
+        boolean rightNeighborCanAccommodate = 
+                block.next != null && block.next.size < degree;
+        
+        if (leftNeighborCanAccommodate) {
+            if (rightNeighborCanAccommodate) {
+                insertIntoFullBlockBothNeighborsNotFull(element, 
+                                                        block.prev,
+                                                        block.next);
+            } else {
+                insertIntoFullBlockLeftNeighborNotFull(element, block.prev);
+            }
+        } else {
+            if (rightNeighborCanAccommodate) {
+                insertIntoFullBlockRightNeighborNotFull(element, block.next);
+            } else {
+                insertIntoFulBlocklNoneNeighborsNotFull(element);
+            }
+        }
+    }
+    
+    /**
+     * Links {@code beforeBlock} immediately before {@code block}.
+     * 
+     * @param beforeBlock the block to link.
+     * @param block       the target block.
+     */
+    private void linkBefore(LinkedArrayListBlock<E> beforeBlock,
+                            LinkedArrayListBlock<E> block) {
+        if (block.prev != null) {
+            beforeBlock.prev = block.prev;
+            beforeBlock.next = block;
+            beforeBlock.prev.next = beforeBlock;
+            block.prev = beforeBlock;
+        } else {
+            beforeBlock.next = block;
+            block.prev = beforeBlock;
+            head = beforeBlock;
+        }
+    }
+    
+    /**
+     * Links {@code afterBlock} immediately after {@code block}.
+     * 
+     * @param afterBlock the block to link.
+     * @param block      the target block.
+     */
+    private void linkAfter(LinkedArrayListBlock<E> afterBlock,
+                           LinkedArrayListBlock<E> block) {
+        if (block.next != null) {
+            
+        } else {
+            
+        }
+    }
+    
+    private void insertIntoFullBlockNoneNeighborNotFull(E element) {
+        int localBlockIndex = this.localBlockIndex;
+        LinkedArrayListBlock<E> block = this.block;
+        
+        if (localBlockIndex == 0) {
+            LinkedArrayListBlock<E> predecessor = 
+                    new LinkedArrayListBlock<>(degree);
+            predecessor.append(element);
+            linkBefore(predecessor, block);
+        } else if (localBlockIndex == degree) {
+            LinkedArrayListBlock<E> successor = 
+                    new LinkedArrayListBlock<>(degree);
+            successor.append(element);
+            linkAfter(successor, block);
+        } else {
+            int leftPartLength = localBlockIndex;
+            int rightPartLength = degree - localBlockIndex;
+            
+            if (leftPartLength < rightPartLength) {
+                
+            } else {
+                
+            }
+        }
+    }
+    
+    
+    /**
+     * Inserts the input element into the current block given that the current
+     * block is full, but the right neighbor (that exists) is not full.
+     * 
+     * @param element       the element to insert.
+     * @param rightNeighbor the right neighbor of the current block.
+     */
+    private void insertIntoFullBlockRightNeighborNotFull(
+            E element, LinkedArrayListBlock<E> rightNeighbor) {
+        int localBlockIndex = this.localBlockIndex;
+        
+        if (localBlockIndex == degree) {
+            rightNeighbor.prepend(element);
+        } else {
+            LinkedArrayListBlock<E> block = this.block;
+            rightNeighbor.prepend(block.removeLast());
+            block.shiftRight(degree - localBlockIndex);
+            block.set(localBlockIndex, element);
+        }
+    }
+    
+    /**
+     * Inserts the input element into the current block given that the current
+     * block is full, but the left neighbor (that exists) is not full.
+     * 
+     * @param element      the element to insert.
+     * @param leftNeighbor the left neighbor of the current block.
+     */
+    private void insertIntoFullBlockLeftNeighborNotFull(
+            E element, LinkedArrayListBlock<E> leftNeighbor) {
+        int localBlockIndex = this.localBlockIndex;
+        
+        if (localBlockIndex == 0) {
+            leftNeighbor.append(element);
+        } else {
+            LinkedArrayListBlock<E> block = this.block;
+            leftNeighbor.append(block.removeFirst());
+            block.shiftLeft(localBlockIndex - 1);
+            block.set(localBlockIndex, element);
+        }   
+    }
+    
+    /**
+     * Inserts the input element into the current block given that the current
+     * block is full, but both its neighbors (that exist) are not full. This 
+     * routine aims to do as little work as possible.
+     * 
+     * @param element       the element to insert.
+     * @param leftNeighbor  the left neighbor of the current block.
+     * @param rightNeighbor the right neighbor of the current block.
+     */
+    private void insertIntoFullBlockBothNeighborsNotFull(
+            E element, 
+            LinkedArrayListBlock<E> leftNeighbor,
+            LinkedArrayListBlock<E> rightNeighbor) {
+        int localBlockIndex = this.localBlockIndex;
+        
+        if (localBlockIndex == 0) {
+            // Just append to the end of the left neighbor:
+            leftNeighbor.append(element);
+        } else if (localBlockIndex == degree) {
+            // Just preprend to the head of the right neighbor:
+            rightNeighbor.prepend(element);
+        } else {
+            LinkedArrayListBlock<E> block = this.block;
+
+            int leftPartLength = localBlockIndex;
+            int rightPartLength = block.size - localBlockIndex;
+
+            if (leftPartLength < rightPartLength) {
+                leftNeighbor.append(block.removeFirst());
+                block.shiftLeft(leftPartLength - 1);
+                block.set(localBlockIndex, element);
+            } else {
+                rightNeighbor.prepend(block.removeLast());
+                block.shiftRight(rightPartLength - 1);
+                block.set(localBlockIndex, element);
+            }
+        }
     }
 
     @Override
@@ -599,14 +911,23 @@ public class LinkedArrayList<E> implements List<E> {
         return c;
     }
     
-    private LinkedArrayListBlock<E> findBlock(int index) {
+    /**
+     * Searches the block and a local block index containing the element that is
+     * at index {@code index} in the entire global list. This method modifies
+     * {@code block} and {@code localBlockIndex}.
+     * 
+     * @param index the global index of the element to search.
+     */
+    private void searchBlockIndexAccess(int index) {
         // The position indexed by 'index' is closer to the head?
         if (index < size - index) {
             // There is a good chance that we may reach the target block faster
             // if we move starting from the head block towards the tail:
             for (LinkedArrayListBlock<E> block = head;; block = block.next) {
                 if (index < block.size) {
-                    return block;
+                    this.localBlockIndex = index;
+                    this.block = block;
+                    return;
                 }
                 
                 index -= block.size;
@@ -618,7 +939,9 @@ public class LinkedArrayList<E> implements List<E> {
             
             for (LinkedArrayListBlock<E> block = tail;;) {
                 if (index >= currentBlockMinIndex) {
-                    return block;
+                    this.localBlockIndex = index - currentBlockMinIndex;
+                    this.block = block;
+                    return;
                 }
                 
                 block = block.prev;
@@ -627,6 +950,39 @@ public class LinkedArrayList<E> implements List<E> {
         }
     }
     
+    private void searchBlockIndexInsertion(int index) {
+        if (index < size - index) {
+            for (LinkedArrayListBlock<E> block = head;; block = block.next) {
+                if (index <= block.size) {
+                    this.localBlockIndex = index;
+                    this.block = block;
+                    return;
+                }
+                
+                index -= block.size;
+            }
+        } else {
+            int currentBlockMinIndex = size - tail.size;
+            
+            for (LinkedArrayListBlock<E> block = tail;; block = block.prev) {
+                if (index >= currentBlockMinIndex) {
+                    this.localBlockIndex = index - currentBlockMinIndex;
+                    this.block = block;
+                    return;
+                }
+                
+                currentBlockMinIndex -= block.size;
+            }
+        }
+    }
+    
+    /**
+     * Checks that the input index is a valid insertion index, i.e., that it is
+     * at least 0 and at most {@code size}.
+     * 
+     * @param index the index to check.
+     * @throws IndexOutOfBoundsException if the index is out of bounds.
+     */
     private void checkInsertionIndex(int index) {
         if (index < 0) {
             throw new IndexOutOfBoundsException(
@@ -636,7 +992,52 @@ public class LinkedArrayList<E> implements List<E> {
         if (index > size) {
             throw new IndexOutOfBoundsException(
                     "The insertion index is too large: " + index + ". " +
-                            "Must be at most " + size + ".");
+                    "Must be at most " + size + " since the size of " +
+                    "this list is " + size + ".");
+        }
+    }
+    
+    /**
+     * Checks that the input index is a valid access index, i.e., that it is at
+     * least 0 and at most {@code size - 1}.
+     * 
+     * @param index the index to check.
+     * @throws IndexOutOfBoundsException if the index is out of bounds.
+     */
+    private void checkAccessIndex(int index) {
+        if (index < 0) {
+            throw new IndexOutOfBoundsException(
+                    "The access index is negative: " + index + ".");
+        }
+        
+        if (index >= size) {
+            throw new IndexOutOfBoundsException(
+                    "The access index is too large: " + index + ". " +
+                    "Must be at most " + (size - 1) + " since the size of " +
+                    "this list is " + size + ".");
+        }
+    }
+    
+    /**
+     * Unlinks the block from the linked list of blocks.
+     * 
+     * @param block the block to unlink.
+     */
+    private void unlink(LinkedArrayListBlock<E> block) {
+        if (block.prev != null) {
+            block.prev.next = block.next;
+        } else {
+            // 'block' is the head node:
+            head = block.next;
+            head.prev = null;
+        }
+        
+        if (block.next != null) {
+            block.next.prev = block.prev;
+        } else {
+            // 'block' is the tail node:
+            tail = block.prev;
+            tail.next = null;
         }
     }
 }
