@@ -1,9 +1,11 @@
 package net.coderodde.util;
 
 import java.util.Collection;
+import java.util.ConcurrentModificationException;
 import java.util.Iterator;
 import java.util.List;
 import java.util.ListIterator;
+import java.util.NoSuchElementException;
 import java.util.Objects;
 
 /**
@@ -479,7 +481,7 @@ public class LinkedArrayList<E> implements List<E> {
 
     @Override
     public Iterator<E> iterator() {
-        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+        return new LinkedArrayListIterator();
     }
 
     @Override
@@ -715,7 +717,7 @@ public class LinkedArrayList<E> implements List<E> {
             if (rightNeighborCanAccommodate) {
                 insertIntoFullBlockRightNeighborNotFull(element, block.next);
             } else {
-                insertIntoFulBlocklNoneNeighborsNotFull(element);
+                insertIntoFullBlockNoneNeighborNotFull(element);
             }
         }
     }
@@ -749,9 +751,14 @@ public class LinkedArrayList<E> implements List<E> {
     private void linkAfter(LinkedArrayListBlock<E> afterBlock,
                            LinkedArrayListBlock<E> block) {
         if (block.next != null) {
-            
+            afterBlock.prev = block;
+            afterBlock.next = block.next;
+            block.next.prev = afterBlock;
+            block.next = afterBlock;
         } else {
-            
+            afterBlock.prev = block;
+            block.next = afterBlock;
+            tail = afterBlock;
         }
     }
     
@@ -774,7 +781,10 @@ public class LinkedArrayList<E> implements List<E> {
             int rightPartLength = degree - localBlockIndex;
             
             if (leftPartLength < rightPartLength) {
-                
+                LinkedArrayListBlock<E> newBlock =
+                        new LinkedArrayListBlock<>(degree);
+                newBlock.append(block.removeFirst());
+                ///
             } else {
                 
             }
@@ -891,6 +901,30 @@ public class LinkedArrayList<E> implements List<E> {
     @Override
     public List<E> subList(int fromIndex, int toIndex) {
         throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+    }
+    
+    @Override
+    public boolean equals(Object o) {
+        if (!(o instanceof List)) {
+            return false;
+        }
+        
+        List<E> other = (List<E>) o;
+        
+        if (size() != other.size()) {
+            return false;
+        }
+        
+        Iterator<E> iterator = iterator();
+        Iterator<E> otherIterator = other.iterator();
+        
+        while (iterator.hasNext()) {
+            if (!Objects.equals(iterator.next(), otherIterator.next())) {
+                return false;
+            }
+        }
+        
+        return true;
     }
     
     /**
@@ -1038,6 +1072,95 @@ public class LinkedArrayList<E> implements List<E> {
             // 'block' is the tail node:
             tail = block.prev;
             tail.next = null;
+        }
+    }
+    
+    /**
+     * This class implements an {@link Iterator} over this list.
+     */
+    private final class LinkedArrayListIterator implements Iterator<E> {
+
+        /**
+         * Caches the size of the list prior to iteration. We need this field
+         * since the client may remove elements while iterating via the 
+         * {@code remove} method.
+         */
+        private final int cachedSize = size;
+        
+        /**
+         * The number of elements iterated so far.
+         */
+        private int iterated = 0;
+        
+        /**
+         * The block being currently iterated.
+         */
+        private LinkedArrayListBlock<E> currentBlock = head;
+        
+        /**
+         * The index pointing at the next element being iterated.
+         */
+        private int currentLocalIndex = 0;
+        
+        /**
+         * The expected modification count of the list being iterated.
+         */
+        private final int expectedModificationCount = modificationCount;
+        
+        private boolean previousOperationWasRemove = true;
+        
+        @Override
+        public boolean hasNext() {
+            return iterated != cachedSize;
+        }
+
+        @Override
+        public E next() {
+            checkConcurrentModification();
+            
+            if (!hasNext()) {
+                throw new NoSuchElementException("Nothing to iterate left.");
+            }
+            
+            E element = currentBlock.get(currentLocalIndex);
+            currentLocalIndex++;
+            
+            if (currentLocalIndex == currentBlock.size) {
+                currentLocalIndex = 0;
+                currentBlock = currentBlock.next;
+            }
+            
+            previousOperationWasRemove = false;
+            iterated++;
+            return element;
+        }
+        
+        @Override
+        public void remove() {
+            if (previousOperationWasRemove) {
+                if (iterated == 0) {
+                    throw new IllegalStateException(
+                            "next() was not called yet.");                    
+                } else {
+                    throw new IllegalStateException(
+                            "Removing the same element twice.");
+                }
+            }
+            
+            if (currentLocalIndex == 0) {
+                currentBlock.prev.removeLast();
+            } else {
+                currentBlock.delete(currentLocalIndex - 1);
+            }
+            
+            previousOperationWasRemove = true;
+        }
+        
+        private void checkConcurrentModification() {
+            if (expectedModificationCount != modificationCount) {
+                throw new ConcurrentModificationException(
+                        "The list was modified while iterated via Iterator.");
+            }
         }
     }
 }
