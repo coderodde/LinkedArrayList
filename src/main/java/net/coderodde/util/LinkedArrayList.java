@@ -221,6 +221,7 @@ public class LinkedArrayList<E> implements List<E> {
          */
         E removeLast() {
             E last = (E) elements[(headIndex + size - 1) & moduloMask];
+            elements[(headIndex + size - 1) & moduloMask] = null;
             --size;
             return last;
         }
@@ -905,6 +906,10 @@ public class LinkedArrayList<E> implements List<E> {
     
     @Override
     public boolean equals(Object o) {
+        if (o == this) {
+            return true;
+        }
+        
         if (!(o instanceof List)) {
             return false;
         }
@@ -918,13 +923,38 @@ public class LinkedArrayList<E> implements List<E> {
         Iterator<E> iterator = iterator();
         Iterator<E> otherIterator = other.iterator();
         
-        while (iterator.hasNext()) {
+        while (iterator.hasNext() && otherIterator.hasNext()) {
             if (!Objects.equals(iterator.next(), otherIterator.next())) {
                 return false;
             }
         }
         
-        return true;
+        return iterator.hasNext() == otherIterator.hasNext();
+    }
+    
+    @Override
+    public int hashCode() {
+        int hashCode = 1;
+        
+        for (E e : this) {
+            hashCode = 31 * hashCode + (e == null ? 0 : e.hashCode());
+        }
+        
+        return hashCode;
+    }
+    
+    @Override
+    public String toString() {
+        StringBuilder sb = new StringBuilder().append("[");
+        String separator = "";
+        
+        for (E element : this) {
+            sb.append(separator);
+            separator = ", ";
+            sb.append(element);
+        }
+        
+        return sb.append("]").toString();
     }
     
     /**
@@ -1107,6 +1137,11 @@ public class LinkedArrayList<E> implements List<E> {
          */
         private final int expectedModificationCount = modificationCount;
         
+        /**
+         * If set, indicates that the last operation was removal. We need to 
+         * keep this around in order to ensure that each removal is preceeded by
+         * at least one {@code next()}.
+         */
         private boolean previousOperationWasRemove = true;
         
         @Override
@@ -1122,6 +1157,7 @@ public class LinkedArrayList<E> implements List<E> {
                 throw new NoSuchElementException("Nothing to iterate left.");
             }
             
+            // First get the element, then modify currentBlock/currentLocalIndex
             E element = currentBlock.get(currentLocalIndex);
             currentLocalIndex++;
             
@@ -1149,11 +1185,25 @@ public class LinkedArrayList<E> implements List<E> {
             
             if (currentLocalIndex == 0) {
                 currentBlock.prev.removeLast();
+                
+                if (currentBlock.prev.size == 0) {
+                    unlink(currentBlock.prev);
+                    blocks--;
+                }
             } else {
-                currentBlock.delete(currentLocalIndex - 1);
+                currentBlock.delete(--currentLocalIndex);
+                
+                if (currentBlock.size == 0) {
+                    LinkedArrayListBlock<E> nextBlock = currentBlock.next;
+                    unlink(currentBlock);
+                    currentBlock = nextBlock;
+                    currentLocalIndex = -1;
+                    blocks--;
+                }
             }
             
             previousOperationWasRemove = true;
+            size--;
         }
         
         private void checkConcurrentModification() {
