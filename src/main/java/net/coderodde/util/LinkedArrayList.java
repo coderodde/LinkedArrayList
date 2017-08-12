@@ -261,9 +261,11 @@ public class LinkedArrayList<E> implements List<E> {
          *                    element.
          */
         private void shiftLeft(int count, int shiftLength) {
+            int targetIndex = size - count;
+            
             for (int i = 0; i < count; ++i) {
-                elements[(headIndex - shiftLength + i) & moduloMask] =
-                elements[(headIndex + i) & moduloMask];
+                elements[(headIndex + targetIndex - shiftLength) & moduloMask] =
+                elements[(headIndex + targetIndex) & moduloMask];
             }
         }
         
@@ -958,6 +960,38 @@ public class LinkedArrayList<E> implements List<E> {
     }
     
     /**
+     * Checks that the list holds no empty blocks unless it contains more than 
+     * one block in total. Also checks that the actual size equals the cached
+     * one.
+     * 
+     * @throws IllegalStateException if some invariant of the data structure is
+     *                               broken.
+     */
+    public void checkHealty() {
+        int countedSize = 0;
+        int blockIndex = 0;
+        
+        for (LinkedArrayListBlock<E> block = head; 
+                block != null;
+                block = block.next, blockIndex++) {
+            if (block.size == 0) {
+                if (head != tail) {
+                    throw new IllegalStateException(
+                            "Block at index " + blockIndex + " is empty.");
+                }
+            }
+            
+            countedSize += block.size;
+        }
+        
+        if (size != countedSize) {
+            throw new IllegalStateException(
+                            "The cached size (" + size + ") and the actual " +
+                            "size (" + countedSize + ") disagree.");
+        }
+    }
+    
+    /**
      * Returns a smallest integer that is a power of two no less than 
      * {@code degree}.
      * 
@@ -1187,6 +1221,7 @@ public class LinkedArrayList<E> implements List<E> {
                 currentBlock.prev.removeLast();
                 
                 if (currentBlock.prev.size == 0) {
+                    System.out.println("yeah");
                     unlink(currentBlock.prev);
                     blocks--;
                 }

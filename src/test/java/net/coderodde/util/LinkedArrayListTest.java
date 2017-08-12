@@ -1,15 +1,9 @@
 package net.coderodde.util;
 
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
-import java.util.ListIterator;
 import java.util.Random;
-import org.junit.After;
-import org.junit.AfterClass;
-import org.junit.Before;
-import org.junit.BeforeClass;
 import org.junit.Test;
 import static org.junit.Assert.*;
 
@@ -34,7 +28,7 @@ public class LinkedArrayListTest {
     }
     
     @Test
-    public void testIteratorRemove() {
+    public void testIteratorRemove1() {
         LinkedArrayList<Integer> list = new LinkedArrayList<>(4);
         
         for (int i = 0; i < 10; ++i) {
@@ -85,13 +79,34 @@ public class LinkedArrayListTest {
         assertEquals(2, list.getNumberOfBlocks());
     }
     
+    // Primarily used for finding a failing case.
+    @Test
+    public void testIteratorRemove2() {
+        LinkedArrayList<Integer> list = new LinkedArrayList<>(2);
+        
+        for (int i = 0; i < 11; ++i) {
+            list.add(i);
+        }
+        
+        Iterator<Integer> iterator = list.iterator();
+        
+        // Omit 0, 1, 2, 3, 4.
+        for (int i = 0; i < 5; ++i) {
+            assertEquals(Integer.valueOf(i), iterator.next());
+        }
+        
+        iterator.remove();
+        
+        assertEquals(Integer.valueOf(5), iterator.next());
+    }
+    
     @Test
     public void testBruteForceIterator() {
-        long seed = System.currentTimeMillis();
+        long seed = 1502556885254L; System.currentTimeMillis();
         System.out.println("testBruteForceIterator: seed = " + seed);
         Random random = new Random(seed);
         
-        List<Integer> myList = new LinkedArrayList<>(4);
+        LinkedArrayList<Integer> myList = new LinkedArrayList<>(4);
         List<Integer> referenceList = new ArrayList<>();
         
         for (int iteration = 0; iteration != 100; iteration++) {
@@ -105,19 +120,39 @@ public class LinkedArrayListTest {
             Iterator<Integer> myIterator = myList.iterator();
             Iterator<Integer> referenceIterator = referenceList.iterator();
             boolean lastOperationWasNext = false;
+            int op = 0;
             
             while (myIterator.hasNext()) {
                 double coin = random.nextDouble();
+                System.out.println("Iteration: " + iteration + ", op: " + op);
                 
-                if (!lastOperationWasNext || coin < 0.55) {
+                if (lastOperationWasNext) {
+                    // Can remove().
+                    if (coin < 0.55) {
+                        assertEquals(referenceIterator.hasNext(),
+                                     myIterator.hasNext());
+
+                        Integer referenceInt = referenceIterator.next();
+                        Integer myInt = myIterator.next();
+                        
+                        assertEquals(referenceInt, myInt);
+                    } else {
+                        referenceIterator.remove();
+                        myIterator.remove();
+                        lastOperationWasNext = false;
+                    }
+                } else {
                     assertEquals(referenceIterator.hasNext(),
                                  myIterator.hasNext());
                     
-                    assertEquals(referenceIterator.next(), myIterator.next());
-                } else {
-                    referenceIterator.remove();
-                    myIterator.remove();
+                    assertEquals(referenceIterator.next(),
+                                 myIterator.next());
+                    
+                    lastOperationWasNext = true;
                 }
+                
+                myList.checkHealty();
+                op++;
             }
             
             while (myIterator.hasNext() && referenceIterator.hasNext()) {
