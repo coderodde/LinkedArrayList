@@ -220,8 +220,9 @@ public class LinkedArrayList<E> implements List<E> {
          * @return the last element.
          */
         E removeLast() {
-            E last = (E) elements[(headIndex + size - 1) & moduloMask];
-            elements[(headIndex + size - 1) & moduloMask] = null;
+            int index = (headIndex + size - 1) & moduloMask;
+            E last = (E) elements[index];
+            elements[index] = null;
             --size;
             return last;
         }
@@ -261,11 +262,12 @@ public class LinkedArrayList<E> implements List<E> {
          *                    element.
          */
         private void shiftLeft(int count, int shiftLength) {
-            int targetIndex = size - count;
+            System.out.println("shiftLeft");
+            int index = size - count;
             
-            for (int i = 0; i < count; ++i) {
-                elements[(headIndex + targetIndex - shiftLength) & moduloMask] =
-                elements[(headIndex + targetIndex) & moduloMask];
+            for (int i = 0; i < count; ++i, ++index) {
+                elements[(index - shiftLength) & moduloMask] =
+                elements[index & moduloMask];
             }
         }
         
@@ -280,9 +282,12 @@ public class LinkedArrayList<E> implements List<E> {
          *                    element.
          */
         private void shiftRight(int count, int shiftLength) {
-            for (int i = count - 1; i >= 0; --i) {
-                elements[(headIndex + size - 1 - i + shiftLength) & moduloMask]
-                = elements[(headIndex + size - 1 - i) & moduloMask];
+            System.out.println("shiftRight");
+            int index = count - 1;
+            
+            for (int i = 0; i < count; ++i, --index) {
+                elements[(index + shiftLength) & moduloMask] =
+                elements[index & moduloMask];
             }
         }
         

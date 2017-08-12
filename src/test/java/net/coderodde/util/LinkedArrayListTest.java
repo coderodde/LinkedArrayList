@@ -137,6 +137,7 @@ public class LinkedArrayListTest {
                         
                         assertEquals(referenceInt, myInt);
                     } else {
+                        System.out.println("Removing...");
                         referenceIterator.remove();
                         myIterator.remove();
                         lastOperationWasNext = false;
@@ -145,9 +146,10 @@ public class LinkedArrayListTest {
                     assertEquals(referenceIterator.hasNext(),
                                  myIterator.hasNext());
                     
-                    assertEquals(referenceIterator.next(),
-                                 myIterator.next());
+                    Integer referenceInt = referenceIterator.next();
+                    Integer myInt = myIterator.next();
                     
+                    assertEquals(referenceInt, myInt);
                     lastOperationWasNext = true;
                 }
                 
